@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{%block title%}map{%endblock%}
+
+{% block content %}
+
+
+    <!--
+    <p>
+        緯度<input type="text" id="lat_input" /> <span id="lat_span"></span><br>
+        経度<input type="text" id="lng_input" /> <span id="lng_span"></span><br>
+        倍率<input type="text" id="zoom_input" /> <span id="zoom_span"></span><br>
+    </p>
+    -->
+    <meta charset='utf-8' />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    
+
+    <button id="search">検索</button>
+    <button id="create_address">物件追加</button>
+    <button id="create_store">加盟店追加</button>
+
+    <div id="formContainer_search" style="display:none;">
+        <form method="GET" action="{% url 'map:index' %}">
+            <label for="">物件名</label>
+            <input type="text" name="input_address" placeholder="物件名を検索">
+            <label for="">レベル</label>
+            <input type="number" name="input_level" placeholder="レベルを検索">
+            <button type="submit" value="search" name="search">検索</button>
+        </form>
+    </div>
+
+    <div id="formContainer_address" style="display:none;">
+        <form method="post">
+            {% csrf_token %}
+            {{ addressform.as_p }}
+            <button type="submit" name="create_address">Submit</button>
+        </form>
+    </div>
+    <div id="formContainer_store" style="display:none;">
+        <form method="post">
+            {% csrf_token %}
+            {{ storeform.as_p }}
+            <button type="submit" name="create_store">Submit</button>
+        </form>
+    </div>
+    
+    <script>
+        document.getElementById('search').addEventListener('click', function() {
+        var formContainer = document.getElementById('formContainer_search');
+        if (formContainer.style.display === 'none' || formContainer.style.display === '') {
+        formContainer.style.display = 'block';
+        } else {
+        formContainer.style.display = 'none';
+        }});
+    </script>
+    
+    <script>
+        document.getElementById('create_address').addEventListener('click', function() {
+        var formContainer = document.getElementById('formContainer_address');
+        if (formContainer.style.display === 'none' || formContainer.style.display === '') {
+        formContainer.style.display = 'block';
+        } else {
+        formContainer.style.display = 'none';
+        }});
+    </script>
+
+    <script>
+        document.getElementById('create_store').addEventListener('click', function() {
+        var formContainer = document.getElementById('formContainer_store');
+        if (formContainer.style.display === 'none' || formContainer.style.display === '') {
+        formContainer.style.display = 'block';
+        } else {
+        formContainer.style.display = 'none';
+        }});
+    </script>
+
+
+    <div id="map" style="height: 100%;"></div>
+    <script>
+        {% load static %}
+       
+        //マーカー設定
+        var addressMarkers  //物件マーカー
+        var storeMarkers    //加盟店マーカー
+        var quakeMarkers    //地震マーカー
+        var quakeCircles    //地震サークル
+        var quakeMainMarkers
+        
+        //地震event_id格納
+        var quake_click
+
+        //マップ初期座標（日本の中心座標）
+        var  map = L.map('map').setView([36, 138], 6);
+        
+        //タイルレイヤーとクレジット（googleを選択）
+        var tileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}', {
+            //右下にクレジットを表示
+            attribution: "<a href='https://developers.google.com/maps/documentation' target='_blank'>Google Map</a>"
+        });
+        tileLayer.addTo(map);
+
+        //マップムーブイベント（現在のズーム値と座標を取得）
+        map.on('move', function(e) {
+            outputPos(map);
+        });
+        function outputPos(map){
+            var pos = map.getCenter();
+            var zoom = map.getZoom();
+            /*
+            document.getElementById('lat_span').innerHTML = pos.lat;
+            document.getElementById('lng_span').innerHTML = pos.lng;
+            document.getElementById('zoom_span').innerHTML = zoom;
+
+            document.getElementById('lat_input').value = pos.lat;
+            document.getElementById('lng_input').value = pos.lng;
+            document.getElementById('zoom_input').value = zoom;
+            */
+        }
+       
+
+        //カスタムアイコン設定
+        function custom_icon(iconPath){
+            custom = L.icon({
+                iconUrl: iconPath,
+                iconSize: [32, 32],
+                iconAnchor: [16, 31],
+                popupAnchor: [0, -31], 
+            })
+            return custom
+        }
+
+
+        //物件アイコンパス
+        function address_icon_Path(level){
+            /*
+            switch(level){
+                case 5:     //レベル5：紫ピン
+                    icon_path = "{% static 'map_app/icon/pin_purple.png'%}"
+                    break;
+                case 4:     //レベル4：赤ピン
+                    icon_path = "{% static 'map_app/icon/pin_red.png'%}"
+                    break;
+                case 3:     //レベル3：オレンジピン
+                    icon_path = "{% static 'map_app/icon/pin_orange.png'%}"
+                    break;
+                case 2:     //レベル2：黄色ピン
+                    icon_path = "{% static 'map_app/icon/pin_yellow.png'%}"
+                    break;
+                default:    //レベル1：青ピン
+                    icon_path = "{% static 'map_app/icon/pin_blue.png'%}"
+                    break;
+            }
+            */
+            icon_path = "{% static 'map_app/icon/pin_purple.png'%}"
+            return icon_path
+        }
+
+        //地震震度アイコンパス
+        function quake_icon_Path(int){
+            switch(true){
+                case int >= 6.5:
+                    icon_path = "{% static 'map_app/icon/quake7.png'%}"
+                    break;
+                case int >= 6.0:
+                    icon_path = "{% static 'map_app/icon/quake6+.png'%}"
+                    break;
+                case int >= 5.5:
+                    icon_path = "{% static 'map_app/icon/quake6-.png'%}"
+                    break;
+                case int >= 5.0:
+                    icon_path = "{% static 'map_app/icon/quake5+.png'%}"
+                    break;
+                case int >= 4.5:
+                    icon_path = "{% static 'map_app/icon/quake5-.png'%}"
+                    break;
+                case int >= 3.5:
+                    icon_path = "{% static 'map_app/icon/quake4.png'%}"
+                    break;
+                case int >= 2.5:
+                    icon_path = "{% static 'map_app/icon/quake3.png'%}"
+                    break;
+                case int >= 1.5:
+                    icon_path = "{% static 'map_app/icon/quake2.png'%}"
+                    break;
+                default:
+                    icon_path = "{% static 'map_app/icon/quake1.png'%}"
+                    break;
+            }
+            return icon_path
+        }
+
+        //加盟店アイコンパス
+        function store_icon_Path(){
+            //icon_path = "{% static 'map_app/icon/store_purple.png'%}"
+            icon_path = "{% static 'map_app/icon/store_black.png'%}"
+            return icon_path
+        }
+
+
+
+        //地震メインアイコンパス
+        function quakeMain_icon_Path(){
+            icon_path = "{% static 'map_app/icon/quake.png'%}"
+            return icon_path
+        }
+
+
+
+        //地震クリックイベント
+        function QuakeDetail(id){
+            if(quakeMarkers){
+                map.removeLayer(quakeMarkers);
+                quakeMarkers = null
+                if(quake_click != id){
+                    QuakeDetailMarker(id)
+                }
+            }else{
+                QuakeDetailMarker(id)
+            }
+            quake_click = id
+        }
+        function QuakeDetailMarker(id){
+            quakeMarkers = L.layerGroup();
+            {%for quakedetail in quakedetaillist%}                
+                if({{quakedetail.event_id}} == id){
+                    iconPath = quake_icon_Path({{quakedetail.intensity}})
+                    quakeMarker = L.marker([{{quakedetail.latitude}},{{quakedetail.longitude}}],{icon:custom_icon(iconPath)})
+                    .bindPopup("<b>{{quakedetail.prefecture }}</b><br>{{quakedetail.city}}");
+                    quakeMarkers.addLayer(quakeMarker);
+                }
+            {%endfor%}
+            quakeMarkers.addTo(map)
+        }
+
+
+        
+        //物件マーカー
+        addressMarkers = L.layerGroup();
+        {%for address in addresslist%}
+            iconPath = address_icon_Path({{address.level}})
+            addressMarker = L.marker([{{address.latitude}},{{address.longitude}}],{icon:custom_icon(iconPath)})
+            .bindPopup("<b>{{ address.name }}</b><br>{{address.category}} {{address.year}}<br>被害レベル：{{address.level}}<br><a href='{%url 'map:address_update' address.id%}'>edit</a>　　<a href='{%url 'map:address_delete' address.id%}'>delete</a>");
+            addressMarkers.addLayer(addressMarker);
+        {%endfor%}
+        addressMarkers.addTo(map)
+        
+
+        //加盟店マーカー
+        storeMarkers = L.layerGroup();
+        {%for store in storelist%}
+        iconPath = store_icon_Path()
+            storeMarker = L.marker([{{store.latitude}}, {{store.longitude}}],{icon:custom_icon(iconPath)})
+            .bindPopup("<b>{{ store.name }}</b><br>{{ store.address }}<br><a href='{%url 'map:store_update' store.id%}'>edit</a>　　<a href='{%url 'map:store_delete' store.id%}'>delete</a>");
+            storeMarkers.addLayer(storeMarker);
+        {%endfor%}
+        storeMarkers.addTo(map)
+
+/*
+        //地震サークル
+        quakeCircles = L.layerGroup();
+        {%for quake in quakelist%} 
+            quakeCircle = L.circle([{{quake.latitude}}, {{quake.longitude}}], {
+                color:"red",
+                fillColor:"#4169e1",
+                fillOpacity:0.4,
+                radius:1000
+            }).bindPopup("<b>{{ quake.name }}</b><br>M{{quake.magnitude}}<br>{{quake.date}}")
+            .on("click",function(e){QuakeDetail({{quake.event_id}})});
+            quakeCircles.addLayer(quakeCircle);
+        {%endfor%}
+        quakeCircles.addTo(map)
+*/
+
+        //地震メインマーカー
+        quakeMainMarkers = L.layerGroup();
+        {%for quake in quakelist%}
+            iconPath = quakeMain_icon_Path()
+            quakeMainMarker = L.marker([{{quake.latitude}}, {{quake.longitude}}],{icon:custom_icon(iconPath)})
+            .bindPopup("<b>{{ quake.name }}</b><br>M{{quake.magnitude}}<br>{{quake.date}}")
+            .on("click",function(e){QuakeDetail({{quake.event_id}})});;
+            quakeMainMarkers.addLayer(quakeMainMarker);
+        {%endfor%}
+        quakeMainMarkers.addTo(map)
+
+
+        //表示チェックボックス
+        var overlayLayerControls = {
+            "物件表示":addressMarkers,
+            "加盟店表示":storeMarkers,
+            "震源地表示":quakeMainMarkers,
+        };        
+        L.control.layers(null,overlayLayerControls,{collapsed:false}).addTo(map);
+    </script>
+{% endblock %}
+
+

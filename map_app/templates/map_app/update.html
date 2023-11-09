@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{%block title%}更新{%endblock%}
+
+{% block content %}
+    <form class="" action="" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" name="submit">Submit</button>
+    </form>
+{% endblock %}

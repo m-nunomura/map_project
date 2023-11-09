@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{%block title%}地震情報更新{%endblock%}
+
+{% block content %}
+    <form method="POST">{% csrf_token %}
+        <div>xml:<input name="xml_url" type="text"/></div>
+        <button type="submit">送信</button>
+    </form>
+{% endblock %}
